@@ -1,0 +1,193 @@
+---
+title: "Lab 6 - K-means & Hierarchical Clustering"
+author: "Deanna Elliott"
+date: "2/10/2022"
+output: html_document
+---
+
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+
+library(tidyverse)
+library(here)
+library(palmerpenguins)
+library(NbClust)
+library(factoextra)
+library(dendextend)
+library(ggdendro)
+```
+
+```{r}
+
+ggplot(penguins) +
+  geom_point(aes(x = bill_length_mm, y = bill_depth_mm,
+                 color = species, shape = sex),
+             size = 3, alpha = 0.7) +
+  scale_color_manual(values = c("orange", "cyan4", "darkmagenta"))
+```
+
+
+```{r}
+
+ggplot(penguins) +
+  geom_point(aes(x = flipper_length_mm, y = body_mass_g,
+                 color = species, shape = sex),
+             size = 3, alpha = 0.7) +
+  scale_color_manual(values = c("orange", "cyan4", "darkmagenta"))
+```
+
+```{r}
+
+penguins_complete <- penguins %>% 
+  drop_na(bill_length_mm, bill_depth_mm, body_mass_g, flipper_length_mm)
+
+penguins_scale <- penguins_complete %>% 
+  select(ends_with(c('_mm', '_g'))) %>% 
+  scale()
+
+summary(penguins_scale)  
+```
+
+### How many clusters?
+
+```{r}
+
+number_est <- NbClust(penguins_scale, min.nc = 2, max.nc = 10, 
+                      method = "kmeans") # est = 3 clusters
+
+fviz_nbclust(penguins_scale, FUNcluster = kmeans, method = 'wss', k.max = 10)
+```
+
+### Run some k-means!
+
+```{r}
+
+penguins_km <- kmeans(penguins_scale, centers = 3, nstart = 25)
+
+penguins_cl <- data.frame(penguins_complete,
+                          cluster_num = factor(penguins_km$cluster))
+
+ggplot(penguins_cl) +
+  geom_point(aes(x = flipper_length_mm, y = body_mass_g,
+                 color = cluster_num, shape = species),
+             size = 2, alpha = 0.7) +
+    scale_color_manual(values = c("orange", "cyan4", "darkmagenta"))
+
+ggplot(penguins_cl) +
+  geom_point(aes(x = bill_length_mm, y = bill_depth_mm,
+                 color = cluster_num, shape = species),
+             size = 2, alpha = 0.7) +
+    scale_color_manual(values = c("orange", "cyan4", "darkmagenta"))
+
+penguins_cl %>%  select(species, cluster_num) %>% table()
+```
+
+### Part 2: Hierarchical Cluster Analysis (Agglomerative)
+
+```{r}
+
+# create distance matrix
+peng_dist <- dist(penguins_scale, method = "euclidean")
+
+# hierarchical clustering (complete linkage)
+peng_hc_complete <- hclust(peng_dist, method = 'complete')
+# ward cluster
+peng_hc_ward <- hclust(peng_dist, method = "ward.D")
+
+# plot using base plot
+plot(peng_hc_complete, cex = 0.6, hang = -1)
+plot(peng_hc_ward, cex = 0.6, hang = -1)
+```
+
+```{r}
+
+# cut into 3 clusters
+peng_cut_hc <- cutree(peng_hc_complete, 3)
+peng_cut_ward <- cutree(peng_hc_ward, 3)
+
+table(peng_cut_hc, penguins$complete$species)
+
+table(peng_cut_ward, penguins_complete$species) # better at differentiating                                                   between chinstrap and gentoo
+```
+
+Binomial logistic regression is supervised, we have known labeled data that our model is compared to. Clustering is unsupervised, we didn't tell the model to group by species.
+
+### Part 3: World Bank Data
+
+```{r}
+
+wb_env <- read_csv(here("data", "wb_env.csv"))
+```
+
+```{r}
+
+wb_ghg_20 <- wb_env %>% 
+  arrange(-ghg) %>% 
+  head(20)
+
+summary(wb_ghg_20)
+
+```
+
+##### Scale the data
+
+```{r}
+
+wb_scaled <- wb_ghg_20 %>% 
+  select(3:7) %>% 
+  scale()
+
+summary(wb_scaled)
+
+rownames(wb_scaled) <- wb_ghg_20$name
+```
+
+#### Calculate distance matrix
+
+```{r}
+
+euc_dist <- dist(wb_scaled, method = "euclidean")
+```
+
+##### Do our clustering!
+
+```{r}
+
+hc_complete <- hclust(euc_dist, method = 'complete')
+
+plot(hc_complete, cex = 0.6, hang = -1)
+```
+
+```{r}
+
+hc_single <- hclust(euc_dist, method = 'single')
+
+plot(hc_single, cex = 0.6, hang = -1)
+```
+
+##### Make a tanglegram
+
+```{r}
+
+# convert to class dendrgram
+
+dend_complete <- as.dendrogram(hc_complete)
+dend_single <- as.dendrogram(hc_single)
+
+tanglegram(dend_complete, dend_single)
+```
+
+##### Make a ggplot dendrogram
+
+```{r}
+
+ggdendrogram(hc_complete, rotate = TRUE) +
+  theme_minimal() +
+  labs(x = "Country", y = "Distance")
+```
+
+
+
+
+
+
